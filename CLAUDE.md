@@ -216,7 +216,7 @@ Android へは `npm run sync` の最後の `scripts/apply-native-icon.mjs` が�
   手元に無いものは傷みようがないので、**タブの期限警告の件数にも `foodsByExpiry()` にも入れない**
 - 「買い足す」は保管場所ではないので **`PLACES` に入れない**（`create` が弾く）。取込と同じく `TABS` にだけ加える。
   並びは `冷蔵 / 冷凍 / 常温 / 買い足す / 取込`。タブの移動・スワイプは `TABS`、保管場所の判定は `PLACES`
-- 買い足すタブは `renderRestock()`。期限は関係ないので並べ替えは効かせず（ボタンは隠す）、
+- 買い足すタブは `restockHtml()`。期限は関係ないので並べ替えは効かせず（ボタンは隠す）、
   保管場所の順・同じ場所の中は登録順に並べる。どこの食品か分からなくなるので
   カードに保管場所の札（`.fplace`）を付ける（`cardHtml(f, true)`）
 - **追加・編集のあとに見せるタブは `tabOf(f)`**（数量 0 なら買い足す、そうでなければ保管場所）。
@@ -231,6 +231,21 @@ Android へは `npm run sync` の最後の `scripts/apply-native-icon.mjs` が�
   400px 未満では並べ替えボタンの文字を省く（`@media (max-width:399px)`）。タブを足す・文言を長くするときは
   320px で重なりを実測すること。バッジはタブの角の外（`top:-6px;right:-5px`）に出してある
   （余白を詰めたので、中に置くと文字に重なる）
+
+### 広い画面（PC）の表示
+
+幅 1100px 以上では、冷蔵・冷凍・常温を**横 3 列**に並べ、右の 4 列目に「買い足す／取込」を
+タブ切替のパネルとして置く（`renderWide()`、右パネルの状態は `sideTab`）。それ未満（スマホ・Android アプリ）は従来の 1 列。
+
+- 判定は `isWide()`（`matchMedia('(min-width:1100px)')`）。CSS の `@media` と**同じ値**に保つ。
+  幅をまたいだら `change` で再描画する
+- 列は `#foodList` に `.wide` を付けてその中に組む。**一覧のクリック委譲（`setupListTaps()`）はそのまま効く**ので、
+  カードにリスナを足さない。広い画面では `.tabs` を隠し、`setupSwipe()` は何もしない
+- 各列は独立してスクロールする。再描画（数量の増減でも走る）でスクロール位置が戻らないよう、
+  `renderWide()` が書き換え前後で `.wbody` の `scrollTop` を保つ
+- 一覧の HTML は `placeHtml()` / `restockHtml()` / `inboxHtml()` が**文字列を返す**。
+  1 列表示と列表示の両方がこれを使うので、描画を変えるときは両方の見た目を確かめる
+- 並べ替えボタンは広い画面では常に効く（3 列とも保管場所なので）
 
 ### 数量の増減
 
@@ -312,7 +327,7 @@ Android へは `npm run sync` の最後の `scripts/apply-native-icon.mjs` が�
 | `GAS_VERSION` | `gas/Code.gs` | `Code.gs` を直したとき |
 | `REQUIRED_GAS_VERSION` | `index.html` | **`Code.gs` の仕様を変えたときだけ** |
 
-現在: `APP_VERSION` 1.7.0 / `GAS_VERSION` 1.3.0 / `REQUIRED_GAS_VERSION` 1.3.0
+現在: `APP_VERSION` 1.8.0 / `GAS_VERSION` 1.3.0 / `REQUIRED_GAS_VERSION` 1.3.0
 
 設定画面が `ping` で GAS 側の番号を取り、`GAS_VERSION < REQUIRED_GAS_VERSION` のときだけ
 再デプロイを促す警告を出す（比較は `cmpVer()`）。
