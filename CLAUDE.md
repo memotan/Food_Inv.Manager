@@ -45,7 +45,7 @@ NeoNoting のような `index2.html`, `index7.html` といった世代スナッ�
 **`fetch` に `Content-Type` ヘッダを付けないこと。** 付けると CORS のプリフライトが飛び、GAS が
 それに応答できずに失敗する（NeoNoting と同じ理由）。
 
-action: `list` / `create` / `update` / `consume` / `delete` / `expiring` / `ping` / `inbox` / `inboxMark`。詳細は README を参照。
+action: `list` / `create` / `update` / `consume` / `delete` / `expiring` / `ping` / `inbox` / `inboxMark` / `ngList` / `ngCreate` / `ngUpdate` / `ngDelete`。詳細は README を参照。
 
 データ形状（GAS が返すもの）:
 
@@ -232,9 +232,27 @@ Android へは `npm run sync` の最後の `scripts/apply-native-icon.mjs` が�
   320px で重なりを実測すること。バッジはタブの角の外（`top:-6px;right:-5px`）に出してある
   （余白を詰めたので、中に置くと文字に重なる）
 
+### NG タブ（買って失敗したものの記録）
+
+買って失敗したものを覚えておき、買い直さないための一覧。**食品の在庫ではない**ので、
+食品のシートには入れず、別のシート「NG」（`NG_SHEET`。初回の書き込みで自動作成）に持つ。
+
+- 項目は `name`（必須）/ `reason`（理由・メモ）/ `boughtDate`（任意）。期限・数量・保管場所は持たない
+- **`PLACES` に入れない。** 取込・買い足すと同じく `TABS` にだけ加える（定数 `NG`）。
+  並びは `冷蔵 / 冷凍 / 常温 / 買い足す / 取込 / NG`
+- 追加は一覧先頭の「NGを追加」ボタン（`.ng-add`）から。下の「食品を追加」は食品専用のまま
+- 一覧のタップは `data-ngid` で見分ける（食品は `data-id`、取込は `data-key`）。`setupListTaps()` の委譲で受ける
+- 書き込みは楽観的更新で、失敗したら元に戻す（追加は一時 ID `tmp_…`。応答待ちのものは編集させない）
+- 取得は `syncNg()`。食品の一覧のあとに別に行い、失敗（GAS が古い等）は NG タブの中で知らせる
+- 並べ替えは効かない（ボタンは隠す）。新しく登録した順
+- 赤・橙・青・緑のバッジは付けない（それぞれ期限・買い足す・取込の意味があるため）
+- **タブが 6 つになったので、360px 未満では `.tabrow` / `.tab` の余白を詰めている**
+  （320px で、最後のタブと並べ替えボタンが重ならないことを実測済み）。タブを足すときは 320px で測り直すこと
+- 広い画面では右パネルの切替が `買い足す / 取込 / NG` の 3 つになる（`sideTab`）
+
 ### 広い画面（PC）の表示
 
-幅 1100px 以上では、冷蔵・冷凍・常温を**横 3 列**に並べ、右の 4 列目に「買い足す／取込」を
+幅 1100px 以上では、冷蔵・冷凍・常温を**横 3 列**に並べ、右の 4 列目に「買い足す／取込／NG」を
 タブ切替のパネルとして置く（`renderWide()`、右パネルの状態は `sideTab`）。それ未満（スマホ・Android アプリ）は従来の 1 列。
 
 - 判定は `isWide()`（`matchMedia('(min-width:1100px)')`）。CSS の `@media` と**同じ値**に保つ。
@@ -300,6 +318,7 @@ Android へは `npm run sync` の最後の `scripts/apply-native-icon.mjs` が�
 - **完了（第 2 段階）**: 編集・消費済み・削除の UI
 - **完了**: 数量の増減（− ＋）、期限カレンダー
 - **完了**: ジャンル分け（シート 10 列目）、切らしているものを集める「買い足す」タブ
+- **完了**: 買って失敗したものを記録する「NG」タブ（別シート「NG」）
 - **完了**: BM の食費を取り込む「取込」タブ（品目ごとの候補 → 保管場所・期限を入れて登録）
 - **完了**: Capacitor による Android アプリ化（`capacitor-app/`）
 - **完了**: アプリアイコン（ドットのバナナの房。`icons/`）
@@ -327,7 +346,7 @@ Android へは `npm run sync` の最後の `scripts/apply-native-icon.mjs` が�
 | `GAS_VERSION` | `gas/Code.gs` | `Code.gs` を直したとき |
 | `REQUIRED_GAS_VERSION` | `index.html` | **`Code.gs` の仕様を変えたときだけ** |
 
-現在: `APP_VERSION` 1.8.0 / `GAS_VERSION` 1.3.0 / `REQUIRED_GAS_VERSION` 1.3.0
+現在: `APP_VERSION` 1.9.0 / `GAS_VERSION` 1.4.0 / `REQUIRED_GAS_VERSION` 1.4.0
 
 設定画面が `ping` で GAS 側の番号を取り、`GAS_VERSION < REQUIRED_GAS_VERSION` のときだけ
 再デプロイを促す警告を出す（比較は `cmpVer()`）。
