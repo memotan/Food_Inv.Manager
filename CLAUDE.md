@@ -249,6 +249,13 @@ Android へは `npm run sync` の最後の `scripts/apply-native-icon.mjs` が�
 - **タブが 6 つになったので、360px 未満では `.tabrow` / `.tab` の余白を詰めている**
   （320px で、最後のタブと並べ替えボタンが重ならないことを実測済み）。タブを足すときは 320px で測り直すこと
 - 広い画面では右パネルの切替が `買い足す / 取込 / NG` の 3 つになる（`sideTab`）
+- **食品の編集画面の「NGに移す」**（`moveToNg()`）: NG の入力画面を、食品の名前・購入日を入れて開く
+  （`ngFromFoodId` に元の食品の ID を持つ）。**NG への保存が成功したあとで**、元の食品を
+  `setConsumedFlag(id, true)` で消費済みにして在庫から外す。削除はしない（取り消せるように）。
+  順序を逆にしないこと（先に外すと、NG への保存に失敗したとき食品だけ消える）。
+  トーストの「元に戻す」は `undoMoveToNg()`（NG の記録を消し、食品を在庫に戻す）
+- 編集画面の操作が 3 つ（消費済み / NGに移す / 削除）になったので、400px 未満では記号を上に積み、
+  360px 未満ではさらに詰めている（320px で折り返さないことを実測済み）
 
 ### 広い画面（PC）の表示
 
@@ -346,7 +353,7 @@ Android へは `npm run sync` の最後の `scripts/apply-native-icon.mjs` が�
 | `GAS_VERSION` | `gas/Code.gs` | `Code.gs` を直したとき |
 | `REQUIRED_GAS_VERSION` | `index.html` | **`Code.gs` の仕様を変えたときだけ** |
 
-現在: `APP_VERSION` 1.9.0 / `GAS_VERSION` 1.4.0 / `REQUIRED_GAS_VERSION` 1.4.0
+現在: `APP_VERSION` 1.10.0 / `GAS_VERSION` 1.4.0 / `REQUIRED_GAS_VERSION` 1.4.0
 
 設定画面が `ping` で GAS 側の番号を取り、`GAS_VERSION < REQUIRED_GAS_VERSION` のときだけ
 再デプロイを促す警告を出す（比較は `cmpVer()`）。
