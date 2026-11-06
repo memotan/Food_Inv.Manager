@@ -50,6 +50,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 /* タブが 5 つあるので、400px 未満では並べ替えボタンを文字なしにして収める（320〜480px で確認）。
    タブの左右の余白も、幅に応じて詰める（.tab の padding） */
 @media (max-width:399px){#sortLabel{display:none}}
+/* タブが 6 つになったので、360px 未満では余白と間隔をさらに詰める（320px で確認） */
+@media (max-width:359px){.tabrow{padding:0 10px 12px;gap:4px}.tabs{gap:2px}.tab{padding:6px 3px}}
 .sortbtn.on{border-color:var(--accent);color:var(--text2)}
 .tab{position:relative;padding:6px clamp(5px,2vw,14px);white-space:nowrap;border-radius:20px;font-size:14px;cursor:pointer;border:none;background:transparent;color:var(--text3);font-family:inherit;transition:all .15s}
 .tab.active{background:var(--text);color:var(--bg);font-weight:500}
@@ -143,6 +145,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .badge.inbox{background:var(--surface2);color:var(--text2)}
 .skipbtn{width:26px;height:26px;border-radius:50%;border:2px solid var(--text4);background:transparent;color:var(--text4);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;font-size:13px;transition:all .15s}
 .skipbtn:active{background:var(--surface2);color:var(--text2);border-color:var(--text3)}
+.ng-add{width:100%;padding:12px;border-radius:14px;background:transparent;border:1px dashed var(--border);color:var(--text2);font-size:14px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0}
+.ng-add:active{background:var(--surface2)}
+.food-card.ng{cursor:pointer}
+.ng-ico{width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:var(--text4);font-size:20px;flex-shrink:0}
+.fmeta .ng-reason{color:var(--text2);white-space:normal}
 .sheet-ctx{font-size:12px;color:var(--text3);margin:-4px 0 12px;line-height:1.6}
 .empty-state{text-align:center;color:var(--text4);font-size:14px;padding:56px 16px;line-height:1.8}
 
@@ -419,17 +426,46 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
   </div>
 </div>
 
+<div class="sheet" id="ngSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <h3 id="ngTitle">NGを追加</h3>
+    <button class="sheet-close" onclick="closeSheet()" aria-label="閉じる"><i class="ti ti-x" aria-hidden="true"></i></button>
+  </div>
+  <div class="sheet-body">
+    <label class="sheet-label" for="ngName">商品名</label>
+    <input class="sheet-inp" id="ngName" placeholder="例：〇〇のカレー" maxlength="60">
+
+    <label class="sheet-label" for="ngReason">理由・メモ（任意）</label>
+    <input class="sheet-inp" id="ngReason" placeholder="例：味が薄い、量が多すぎた" maxlength="100">
+
+    <div class="label-row">
+      <label class="sheet-label" for="ngBought">購入日（任意）</label>
+      <button type="button" class="label-btn" onclick="document.getElementById('ngBought').value = todayStr()">今日</button>
+    </div>
+    <input class="sheet-inp" id="ngBought" type="date">
+
+    <button class="sheet-save" onclick="saveNg()">保存</button>
+    <div class="sheet-actions" id="ngActions">
+      <button class="sact danger" onclick="removeNg()">
+        <i class="ti ti-trash" aria-hidden="true"></i> 削除
+      </button>
+    </div>
+    <div class="sheet-err" id="ngErrMsg"></div>
+  </div>
+</div>
+
 <script>
 // ========== 定数 ==========
 // アプリ（この index.html）のバージョン。GitHub Pages への push で自動更新されるので、
 // 直したら気兼ねなく上げてよい
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 
 // このアプリが動くのに必要な gas/Code.gs の最低バージョン。
 // GAS は手で貼り直して再デプロイする必要があるため、これを下回っていたら設定画面が警告を出す。
 // **Code.gs の仕様を変えたときだけ**ここを上げること。フロントだけ直したときに上げると、
 // 中身の変わっていない GAS の貼り直しを強いることになる
-const REQUIRED_GAS_VERSION = '1.3.0';
+const REQUIRED_GAS_VERSION = '1.4.0';
 
 const PLACES = ['冷蔵', '冷凍', '常温'];
 // Budget Manager から取り込んだ、まだ保管場所の決まっていない品目の置き場。
@@ -438,7 +474,10 @@ const INBOX = '取込';
 // 数量 0 の食品を、保管場所をまたいで 1 か所に集めるタブ。これも保管場所ではないので
 // PLACES には入れない（create が弾く）。保管場所のタブにはこの食品を出さない
 const RESTOCK = '買い足す';
-const TABS = PLACES.concat(RESTOCK, INBOX);
+// 買って失敗したものの記録。これも保管場所ではないので PLACES には入れない。
+// 食品ではなく、別のシート「NG」に持つ（在庫・期限・数量とは無関係）
+const NG = 'NG';
+const TABS = PLACES.concat(RESTOCK, INBOX, NG);
 const KINDS  = ['賞味期限', '消費期限'];
 
 // ジャンル。gas/Code.gs の CATEGORIES と同じ並びにすること
@@ -455,6 +494,10 @@ let foods = [];            // サーバから取得した食品の配列
 let inbox = [];            // 取込待ちの品目。BM の食費を品目に分けたもの
 let inboxState = '';       // '' 未取得 | 'ok' | 'unconfigured'（BM の ID 未設定）| 'error'
 let inboxErr = '';
+let ngs = [];              // 買って失敗したもの。新しく登録した順
+let ngState = '';          // '' 未取得 | 'ok' | 'error'（GAS が古いとここに入る）
+let ngErr = '';
+let sheetNgId = null;      // 編集中の NG の ID。null なら新規追加
 let sheetInbox = null;     // 取込待ちから開いているときの、その品目。通常の追加・編集なら null
 let gasUrl = '';
 let warnDays = DEFAULT_WARN_DAYS;
@@ -744,6 +787,21 @@ async function syncFromSheet() {
   // 取込待ちは別のスプレッドシートを開くぶん遅いので、食品の一覧を出したあとに取りに行く。
   // 失敗しても食品の一覧は使えるようにしておく
   syncInbox();
+  syncNg();
+}
+
+/** NG を取り直す。失敗（GAS が古い等）は同期ドットではなく、NG タブの中で知らせる */
+async function syncNg() {
+  if (!gasUrl) { ngs = []; ngState = ''; ngErr = ''; return; }
+  try {
+    ngs = await gasCall({ action: 'ngList' });
+    ngState = 'ok';
+    ngErr = '';
+  } catch (e) {
+    ngState = 'error';
+    ngErr = e.message;
+  }
+  renderAll();
 }
 
 /** 取込待ちを取り直す。失敗は同期ドットではなく、取込タブの中で知らせる */
@@ -864,7 +922,7 @@ function alertCount(place) {
 function renderTabs() {
   // 取込・買い足すタブでは並べ替えが効かないので隠す（幅は保って、タブが動かないようにする）
   // 広い画面では常に 3 列の保管場所が見えているので、並べ替えは常に効く
-  const noSort = !isWide() && (currentPlace === INBOX || currentPlace === RESTOCK);
+  const noSort = !isWide() && (currentPlace === INBOX || currentPlace === RESTOCK || currentPlace === NG);
   document.getElementById('sortBtn').style.visibility = noSort ? 'hidden' : '';
 
   document.getElementById('tabs').innerHTML = TABS.map(p => {
@@ -872,6 +930,9 @@ function renderTabs() {
       const n = inbox.length;
       const badge = n ? `<span class="tbadge inbox">${n}</span>` : '';
       return `<button class="tab${p === currentPlace ? ' active' : ''}" onclick="switchPlace('${p}')" title="Budget Manager から取り込む">${escHtml(p)}${badge}</button>`;
+    }
+    if (p === NG) {
+      return `<button class="tab${p === currentPlace ? ' active' : ''}" onclick="switchPlace('${p}')" title="買って失敗したものの記録">${escHtml(p)}</button>`;
     }
     if (p === RESTOCK) {
       const n = restockFoods().length;
@@ -997,6 +1058,7 @@ function renderList() {
   el.classList.remove('wide');
   if (currentPlace === INBOX) el.innerHTML = inboxHtml();
   else if (currentPlace === RESTOCK) el.innerHTML = restockHtml();
+  else if (currentPlace === NG) el.innerHTML = ngHtml();
   else el.innerHTML = placeHtml(currentPlace);
 }
 
@@ -1004,10 +1066,10 @@ function renderList() {
 const WIDE_MQ = window.matchMedia('(min-width:1100px)');
 function isWide() { return WIDE_MQ.matches; }
 
-let sideTab = RESTOCK;   // 右パネルで見せているのが「買い足す」か「取込」か
+let sideTab = RESTOCK;   // 右パネルで見せているのが「買い足す」「取込」「NG」のどれか
 
 function switchSide(tab) {
-  if (tab !== RESTOCK && tab !== INBOX) return;
+  if (tab !== RESTOCK && tab !== INBOX && tab !== NG) return;
   sideTab = tab;
   renderList();
 }
@@ -1033,8 +1095,8 @@ function renderWide(el) {
   const sideBtn = (t, n, cls) =>
     `<button class="tab${sideTab === t ? ' active' : ''}" data-t="${escHtml(t)}" onclick="switchSide(this.dataset.t)">`
     + `${escHtml(t)}${n ? `<span class="tbadge ${cls}">${n}</span>` : ''}</button>`;
-  cols.push(`<section class="wcol"><div class="wside">${sideBtn(RESTOCK, nRestock, 'restock')}${sideBtn(INBOX, nInbox, 'inbox')}</div>`
-    + `<div class="wbody">${sideTab === INBOX ? inboxHtml() : restockHtml()}</div></section>`);
+  cols.push(`<section class="wcol"><div class="wside">${sideBtn(RESTOCK, nRestock, 'restock')}${sideBtn(INBOX, nInbox, 'inbox')}${sideBtn(NG, 0, '')}</div>`
+    + `<div class="wbody">${sideTab === INBOX ? inboxHtml() : sideTab === NG ? ngHtml() : restockHtml()}</div></section>`);
 
   el.classList.add('wide');
   el.innerHTML = cols.join('');
@@ -1058,6 +1120,36 @@ function restockHtml() {
       : 'まず設定からGASのウェブアプリURLを<br>登録してください。'}</div>`;
   }
   return list.map(f => cardHtml(f, true)).join('');
+}
+
+/** NG タブ。買って失敗したものの一覧。先頭に追加ボタンを置く */
+function ngHtml() {
+  const add = `<button class="ng-add" type="button"><i class="ti ti-plus" aria-hidden="true"></i> NGを追加</button>`;
+  if (!ngs.length) {
+    let msg;
+    if (!gasUrl) msg = 'まず設定からGASのウェブアプリURLを<br>登録してください。';
+    else if (ngState === 'error') {
+      msg = 'NG を読み込めませんでした。<br>' + escHtml(ngErr) + '<br>'
+        + 'GAS が古い場合は、設定画面の案内に沿って<br>貼り直してください。';
+    } else if (ngState === '') msg = '食品の同期が終わると表示されます。';
+    else msg = '買って失敗したものを記録しておくと、<br>同じものを買い直さずに済みます。';
+    return (gasUrl && ngState === 'ok' ? add : '') + `<div class="empty-state">${msg}</div>`;
+  }
+  return add + ngs.map(ngCardHtml).join('');
+}
+
+function ngCardHtml(n) {
+  const meta = [];
+  if (n.reason) meta.push(`<span class="ng-reason">${escHtml(n.reason)}</span>`);
+  if (n.boughtDate) meta.push(`<span>購入 <span class="fdate">${escHtml(shortDate(n.boughtDate))}</span></span>`);
+  return `
+    <div class="food-card ng${n.pending ? ' pending' : ''}" data-ngid="${escHtml(n.id)}">
+      <span class="ng-ico"><i class="ti ti-thumb-down" aria-hidden="true"></i></span>
+      <div class="fbody">
+        <div class="fname">${escHtml(n.name)}</div>
+        ${meta.length ? `<div class="fmeta">${meta.join('')}</div>` : ''}
+      </div>
+    </div>`;
 }
 
 /** 取込タブ。買い物（BM の 1 件）ごとに見出しを置き、品目をカードで並べる */
@@ -1160,7 +1252,9 @@ function setupListTaps() {
     // スワイプの直後に発火したクリックは無視する
     if (Date.now() - lastSwipeAt < 400) return;
 
+    if (e.target.closest('.ng-add')) { openNgSheet(); return; }
     const card = e.target.closest('.food-card');
+    if (card && card.dataset.ngid) { openNgSheet(card.dataset.ngid); return; }
     if (card && card.dataset.key) {   // 取込待ちのカード
       if (e.target.closest('.skipbtn')) skipInbox(card.dataset.key);
       else openInboxSheet(card.dataset.key);
@@ -1265,6 +1359,8 @@ function openInboxSheet(key) {
 function closeSheet() {
   document.getElementById('sheetBackdrop').classList.remove('open');
   document.getElementById('editSheet').classList.remove('open');
+  document.getElementById('ngSheet').classList.remove('open');
+  sheetNgId = null;
   sheetFoodId = null;
   sheetInbox = null;
 }
@@ -1559,6 +1655,87 @@ async function removeFromSheet() {
   }
 }
 
+// ========== NG（買って失敗したもの） ==========
+function openNgSheet(id) {
+  if (id && String(id).indexOf('tmp_') === 0) return;   // 保存の応答待ちのものは、まだ編集できない
+  const ng = id ? ngs.find(x => String(x.id) === String(id)) : null;
+  sheetNgId = ng ? ng.id : null;
+  document.getElementById('ngTitle').textContent = ng ? 'NGを編集' : 'NGを追加';
+  document.getElementById('ngName').value = ng ? ng.name : '';
+  document.getElementById('ngReason').value = ng ? ng.reason : '';
+  document.getElementById('ngBought').value = ng ? (ng.boughtDate || '') : todayStr();
+  document.getElementById('ngErrMsg').textContent = '';
+  document.getElementById('ngActions').style.display = ng ? 'flex' : 'none';
+
+  document.getElementById('sheetBackdrop').classList.add('open');
+  document.getElementById('ngSheet').classList.add('open');
+  setTimeout(() => document.getElementById('ngName').focus(), 300);
+}
+
+async function saveNg() {
+  const name = document.getElementById('ngName').value.trim();
+  const reason = document.getElementById('ngReason').value.trim();
+  const boughtDate = document.getElementById('ngBought').value;
+  if (!name) { document.getElementById('ngErrMsg').textContent = '商品名を入力してください'; return; }
+  if (!gasUrl) { document.getElementById('ngErrMsg').textContent = '先に設定でGAS URLを登録してください'; return; }
+
+  const id = sheetNgId;
+  closeSheet();
+  // 追加後に見せるのは NG の一覧。他のタブにいたら移る（広い画面では右パネルを NG にする）
+  currentPlace = NG;
+  sideTab = NG;
+
+  const before = ngs;
+  if (id) {
+    ngs = ngs.map(x => String(x.id) === String(id) ? Object.assign({}, x, { name, reason, boughtDate }) : x);
+    renderAll();
+    try {
+      const saved = await gasCall({ action: 'ngUpdate', ng: { id, name, reason, boughtDate } });
+      ngs = ngs.map(x => String(x.id) === String(id) ? saved : x);
+      showToast('保存しました');
+    } catch (e) {
+      ngs = before;
+      showToast('保存失敗: ' + e.message);
+    }
+    renderAll();
+    return;
+  }
+
+  // 追加は楽観的更新: 一時 ID で先に出し、応答で確定する。失敗したら取り除く
+  const tmp = { id: 'tmp_' + Date.now(), name, reason, boughtDate, pending: true };
+  ngs = [tmp].concat(ngs);
+  renderAll();
+  try {
+    const saved = await gasCall({ action: 'ngCreate', ng: { name, reason, boughtDate } });
+    ngs = ngs.map(x => x.id === tmp.id ? saved : x);
+    showToast('NGに追加しました');
+  } catch (e) {
+    ngs = ngs.filter(x => x.id !== tmp.id);
+    showToast('追加失敗: ' + e.message);
+  }
+  renderAll();
+}
+
+async function removeNg() {
+  const id = sheetNgId;
+  const ng = ngs.find(x => String(x.id) === String(id));
+  if (!ng) return;
+  if (!confirm('「' + ng.name + '」をNGから削除しますか？')) return;
+
+  closeSheet();
+  const before = ngs;
+  ngs = ngs.filter(x => String(x.id) !== String(id));
+  renderAll();
+  try {
+    await gasCall({ action: 'ngDelete', id: id });
+    showToast('削除しました');
+  } catch (e) {
+    ngs = before;
+    renderAll();
+    showToast('削除失敗: ' + e.message);
+  }
+}
+
 // ========== 復帰時の処理 ==========
 /**
  * 画面が再び見える状態になったときの処理。
@@ -1588,7 +1765,8 @@ function setupCapacitor() {
 
   // Android の戻るボタン: モーダル → 設定画面 → アプリ終了 の順に閉じていく
   App.addListener('backButton', () => {
-    if (document.getElementById('editSheet').classList.contains('open')) {
+    if (document.getElementById('editSheet').classList.contains('open')
+        || document.getElementById('ngSheet').classList.contains('open')) {
       closeSheet();
     } else if (document.getElementById('settingsScreen').classList.contains('active')
             || isCalendarOpen()) {

@@ -265,6 +265,13 @@ ID は秘密の鍵ではないが、公開 repo には書かない（コード�
 | `ping` | — | `{ version, today, tz }` |
 | `inbox` | — | `{ configured, items }`。BM の食費の候補（品目ごと）。`configured:false` は BM の ID が未設定 |
 | `inboxMark` | `{ key, status }` | `{ key, status }`。`status` は `skipped`（無視）／ `imported` ／ `''`（記録を消して候補に戻す） |
+| `ngList` | — | NG（買って失敗したもの）の配列。新しく登録した順。シートが無ければ空 |
+| `ngCreate` | `{ ng: { name, reason?, boughtDate? } }` | 追加された NG（ID 付き）。`name` は必須 |
+| `ngUpdate` | `{ ng: { id, ...更新する項目 } }` | 更新後の NG（部分更新） |
+| `ngDelete` | `{ id }` | `{ id, deleted: true }`（物理削除） |
+
+NG は食品の在庫とは別のシート **「NG」**（初回の書き込みで自動作成）に持つ。列は
+`ID / 商品名 / 理由 / 購入日 / 更新日時`。返る NG：`{ id, name, reason, boughtDate, updatedAt }`。
 
 `create` に `inboxKey` を添えると、登録と同じ呼び出しの中でその候補を取り込み済みにする
 （登録だけ通って記録が漏れ、同じ品目が候補に残るのを避けるため）。

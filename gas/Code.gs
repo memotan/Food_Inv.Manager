@@ -15,7 +15,7 @@
  * ping で返しており、揃っていないとアプリの設定画面が警告を出す。
  * Code.gs を直したら、ここを上げたうえで GAS エディタに貼り直し、再デプロイすること。
  */
-var GAS_VERSION = '1.3.0';
+var GAS_VERSION = '1.4.0';
 
 var SHEET_NAME = '食品';
 
@@ -60,6 +60,14 @@ var HISTORY_HEADERS = ['キー', '状態', '更新日時'];
 var INBOX_IMPORTED = 'imported';
 var INBOX_SKIPPED = 'skipped';
 
+/**
+ * 「買って失敗したもの」の記録。食品の在庫とは別のシートで、無ければ最初の書き込みで作る。
+ * 列を足すときは食品シートと同じく末尾に足すこと。
+ */
+var NG_SHEET = 'NG';
+var NG_HEADERS = ['ID', '商品名', '理由', '購入日', '更新日時'];
+var NG_COL = { ID: 1, NAME: 2, REASON: 3, BOUGHT: 4, UPDATED: 5 };
+
 
 // ========== エントリポイント ==========
 
@@ -98,6 +106,10 @@ function dispatch_(body) {
     case 'expiring':return expiringFoods(body.days);
     case 'inbox':     return listInbox();
     case 'inboxMark': return markInbox(body.key, body.status);
+    case 'ngList':    return listNg();
+    case 'ngCreate':  return addNg(body.ng || {});
+    case 'ngUpdate':  return updateNg(body.ng || {});
+    case 'ngDelete':  return deleteNg(body.id);
     default: throw new Error('不明な action: ' + action);
   }
 }
@@ -381,6 +393,117 @@ function findHistoryRow_(sh, key) {
   }
   return -1;
 }
+
+// ========== NG（買って失敗したもの） ==========
+
+/** 新しく登録した順（新しいものが先頭）に返す。シートが無ければ空 */
+function listNg() {
+  var sh = ngSheet_(false);
+  if (!sh || sh.getLastRow() < 2) return [];
+  var values = sh.getRange(2, 1, sh.getLastRow() - 1, NG_HEADERS.length).getValues();
+  return values
+    .filter(function (r) { return String(r[NG_COL.ID - 1]).trim() !== ''; })
+    .map(ngFromRow_)
+    .reverse();
+}
+
+/**
+ * @param {Object} ng { name, reason, boughtDate }
+ * @return {Object} 追加されたもの（ID 付き）
+ */
+function addNg(ng) {
+  var rec = ngNormalize_(ng);
+  rec.id = Utilities.getUuid();
+  rec.updatedAt = nowStr_();
+  var sh = ngSheet_(true);
+  sh.getRange(sh.getLastRow() + 1, 1, 1, NG_HEADERS.length).setValues([ngToRow_(rec)]);
+  return rec;
+}
+
+/** id で行を特定し、渡されたフィールドだけ上書きする */
+function updateNg(ng) {
+  if (!ng || !ng.id) throw new Error('id が指定されていません');
+  var sh = ngSheet_(false);
+  var row = sh ? findNgRow_(sh, ng.id) : -1;
+  if (row < 0) throw new Error('該当する NG が見つかりません: ' + ng.id);
+
+  var cur = ngFromRow_(sh.getRange(row, 1, 1, NG_HEADERS.length).getValues()[0]);
+  ['name', 'reason', 'boughtDate'].forEach(function (k) {
+    if (ng[k] !== undefined) cur[k] = ng[k];
+  });
+  var rec = ngNormalize_(cur);
+  rec.id = cur.id;
+  rec.updatedAt = nowStr_();
+  sh.getRange(row, 1, 1, NG_HEADERS.length).setValues([ngToRow_(rec)]);
+  return rec;
+}
+
+function deleteNg(id) {
+  if (!id) throw new Error('id が指定されていません');
+  var sh = ngSheet_(false);
+  var row = sh ? findNgRow_(sh, id) : -1;
+  if (row < 0) throw new Error('該当する NG が見つかりません: ' + id);
+  sh.deleteRow(row);
+  return { id: id, deleted: true };
+}
+
+function ngSheet_(create) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(NG_SHEET);
+  if (!sh && create) {
+    sh = ss.insertSheet(NG_SHEET);
+    sh.getRange(1, 1, 1, NG_HEADERS.length).setValues([NG_HEADERS]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    // 日付は文字列（yyyy-MM-dd）のまま持つ
+    sh.getRange(2, NG_COL.BOUGHT, sh.getMaxRows() - 1).setNumberFormat('@');
+    sh.setColumnWidth(NG_COL.ID, 240);
+    sh.setColumnWidth(NG_COL.NAME, 200);
+    sh.setColumnWidth(NG_COL.REASON, 280);
+  }
+  return sh;
+}
+
+function findNgRow_(sh, id) {
+  var last = sh.getLastRow();
+  if (last < 2) return -1;
+  var ids = sh.getRange(2, NG_COL.ID, last - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(id)) return i + 2;
+  }
+  return -1;
+}
+
+function ngFromRow_(r) {
+  return {
+    id:         String(r[NG_COL.ID - 1]),
+    name:       String(r[NG_COL.NAME - 1]),
+    reason:     String(r[NG_COL.REASON - 1] || ''),
+    boughtDate: dateStr_(r[NG_COL.BOUGHT - 1]),
+    updatedAt:  dateTimeStr_(r[NG_COL.UPDATED - 1])
+  };
+}
+
+function ngToRow_(f) {
+  var row = [];
+  row[NG_COL.ID - 1]      = f.id;
+  row[NG_COL.NAME - 1]    = f.name;
+  row[NG_COL.REASON - 1]  = f.reason || '';
+  row[NG_COL.BOUGHT - 1]  = f.boughtDate || '';
+  row[NG_COL.UPDATED - 1] = f.updatedAt || nowStr_();
+  return row;
+}
+
+/** 商品名は必須。購入日は任意（不正な日付は空にする） */
+function ngNormalize_(f) {
+  var name = String(f.name || '').trim();
+  if (!name) throw new Error('商品名を入力してください');
+  return {
+    name: name,
+    reason: String(f.reason || '').trim(),
+    boughtDate: normDate_(f.boughtDate)
+  };
+}
+
 
 /**
  * 取り込みの確認用。GAS エディタから 1 回手動で実行する。
