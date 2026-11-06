@@ -264,6 +264,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .sheet-actions{display:none;gap:10px;margin-top:10px}
 .sact{flex:1;padding:12px;border-radius:12px;background:transparent;border:1px solid var(--border);color:var(--text2);font-size:14px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s}
 .sact:active{background:var(--surface2)}
+/* 操作が 3 つになったので、狭い画面では記号を上に積んで文字の折り返しを避ける（320px で確認） */
+@media (max-width:399px){.sact{flex-direction:column;gap:4px;padding:10px 4px;font-size:12px;line-height:1.3}}
+@media (max-width:359px){.sheet-actions{gap:6px}.sact{padding:10px 2px;font-size:11.5px}}
 .sact.danger{color:var(--danger-fg)}
 .sact.danger:active{background:var(--danger-bg)}
 .sheet-err{font-size:13px;color:var(--danger);min-height:18px;margin-top:8px;text-align:center}
@@ -418,6 +421,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
       <button class="sact" onclick="consumeFromSheet()">
         <i class="ti ti-check" aria-hidden="true"></i> 消費済みにする
       </button>
+      <button class="sact" onclick="moveToNg()">
+        <i class="ti ti-thumb-down" aria-hidden="true"></i> NGに移す
+      </button>
       <button class="sact danger" onclick="removeFromSheet()">
         <i class="ti ti-trash" aria-hidden="true"></i> 削除
       </button>
@@ -459,7 +465,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 // ========== 定数 ==========
 // アプリ（この index.html）のバージョン。GitHub Pages への push で自動更新されるので、
 // 直したら気兼ねなく上げてよい
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.10.0';
 
 // このアプリが動くのに必要な gas/Code.gs の最低バージョン。
 // GAS は手で貼り直して再デプロイする必要があるため、これを下回っていたら設定画面が警告を出す。
@@ -497,6 +503,7 @@ let inboxErr = '';
 let ngs = [];              // 買って失敗したもの。新しく登録した順
 let ngState = '';          // '' 未取得 | 'ok' | 'error'（GAS が古いとここに入る）
 let ngErr = '';
+let ngFromFoodId = null;   // 食品の編集画面から「NGに移す」で開いたときの、元の食品の ID
 let sheetNgId = null;      // 編集中の NG の ID。null なら新規追加
 let sheetInbox = null;     // 取込待ちから開いているときの、その品目。通常の追加・編集なら null
 let gasUrl = '';
@@ -1361,6 +1368,7 @@ function closeSheet() {
   document.getElementById('editSheet').classList.remove('open');
   document.getElementById('ngSheet').classList.remove('open');
   sheetNgId = null;
+  ngFromFoodId = null;
   sheetFoodId = null;
   sheetInbox = null;
 }
@@ -1535,7 +1543,7 @@ async function applyUpdate(id, patch) {
 /** 消費済みフラグを立てる／下ろす（論理削除）。失敗したら元に戻す */
 async function setConsumedFlag(id, consumed) {
   const i = foods.findIndex(f => String(f.id) === String(id));
-  if (i < 0) return;
+  if (i < 0) return false;
 
   const before = foods[i];
   foods[i] = Object.assign({}, before, { consumed: consumed });
@@ -1545,12 +1553,14 @@ async function setConsumedFlag(id, consumed) {
   try {
     await gasCall({ action: 'consume', id: id, consumed: consumed });
     setSyncState('ok', '保存しました ' + nowHm());
+    return true;
   } catch (e) {
     const j = foods.findIndex(f => String(f.id) === String(id));
     if (j >= 0) foods[j] = before;
     renderAll();
     setSyncState('err', '保存失敗: ' + e.message);
     showToast('保存失敗: ' + e.message);
+    return false;
   }
 }
 
@@ -1656,6 +1666,22 @@ async function removeFromSheet() {
 }
 
 // ========== NG（買って失敗したもの） ==========
+/**
+ * 食品の編集画面の「NGに移す」。NG の入力画面を、食品の名前と購入日を入れた状態で開く。
+ * 保存できたら、元の食品は消費済みにして在庫から外す（行は消さないので取り消せる）。
+ */
+function moveToNg() {
+  const food = foods.find(f => String(f.id) === String(sheetFoodId));
+  if (!food) return;
+  closeSheet();
+  openNgSheet();
+  ngFromFoodId = food.id;
+  document.getElementById('ngTitle').textContent = 'NGに移す';
+  document.getElementById('ngName').value = food.name;
+  document.getElementById('ngBought').value = food.boughtDate || todayStr();
+  setTimeout(() => document.getElementById('ngReason').focus(), 300);
+}
+
 function openNgSheet(id) {
   if (id && String(id).indexOf('tmp_') === 0) return;   // 保存の応答待ちのものは、まだ編集できない
   const ng = id ? ngs.find(x => String(x.id) === String(id)) : null;
@@ -1680,6 +1706,7 @@ async function saveNg() {
   if (!gasUrl) { document.getElementById('ngErrMsg').textContent = '先に設定でGAS URLを登録してください'; return; }
 
   const id = sheetNgId;
+  const fromId = ngFromFoodId;   // closeSheet() で消えるので先に取っておく
   closeSheet();
   // 追加後に見せるのは NG の一覧。他のタブにいたら移る（広い画面では右パネルを NG にする）
   currentPlace = NG;
@@ -1708,12 +1735,33 @@ async function saveNg() {
   try {
     const saved = await gasCall({ action: 'ngCreate', ng: { name, reason, boughtDate } });
     ngs = ngs.map(x => x.id === tmp.id ? saved : x);
-    showToast('NGに追加しました');
+    renderAll();
+    if (fromId) {
+      // 食品からの移動: NG に入ったあとで、元の食品を在庫から外す。
+      // 外すのに失敗しても NG の記録は残る（二重にならないよう、食品側は消費済みの取り直しだけで済む）
+      const ok = await setConsumedFlag(fromId, true);
+      if (ok) showToast('NGに移しました', '元に戻す', () => undoMoveToNg(saved.id, fromId));
+      else showToast('NGに追加しましたが、食品は在庫に残っています');
+    } else {
+      showToast('NGに追加しました');
+    }
   } catch (e) {
     ngs = ngs.filter(x => x.id !== tmp.id);
     showToast('追加失敗: ' + e.message);
   }
   renderAll();
+}
+
+/** 「NGに移す」の取り消し: NG の記録を消し、食品を在庫に戻す */
+async function undoMoveToNg(ngId, foodId) {
+  try {
+    await gasCall({ action: 'ngDelete', id: ngId });
+    ngs = ngs.filter(x => String(x.id) !== String(ngId));
+    renderAll();
+    await setConsumedFlag(foodId, false);
+  } catch (e) {
+    showToast('元に戻せませんでした: ' + e.message);
+  }
 }
 
 async function removeNg() {
