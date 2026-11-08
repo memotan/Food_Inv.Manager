@@ -65,7 +65,11 @@ action: `list` / `create` / `update` / `consume` / `delete` / `expiring` / `ping
   ずれるとアプリで選んだジャンルが GAS 側で `その他` に落とされ、原因が分かりにくい
   （`test_category.js` が両ファイルを読んで突き合わせている）。
   **種類を増減したら `GAS_VERSION` と `REQUIRED_GAS_VERSION` を上げる**。
-  古い GAS のままだと新しいジャンルが黙って `その他` になるため
+  古い GAS のままだと新しいジャンルが黙って `その他` になるため。
+  あわせて **`setupSheet` の再実行が要る**（ジャンル列のプルダウン `requireValueInList(CATEGORIES)` を
+  引き直す。しないと、新しい種類の行がシート上で不正な値に見える。アプリの動作には影響しない）
+- **ジャンルには食品でないもの（`日用品`）も入る。** 食品専用のアプリではなくなっているので、
+  期限なし・数量・「買い足す」で足りる管理は、ジャンルを足すだけで済ませる（別の列・タブは作らない）
 - ジャンルの並びは**ジャンル順表示の並び**そのもの。近い性質のものを隣に置く。
   末尾の `その他` は受け皿を兼ねるので、動かさない
 - **シートに列を足すときは必ず末尾に足す。** 途中に挿すと既存行の値がずれる。
@@ -353,7 +357,7 @@ Android へは `npm run sync` の最後の `scripts/apply-native-icon.mjs` が�
 | `GAS_VERSION` | `gas/Code.gs` | `Code.gs` を直したとき |
 | `REQUIRED_GAS_VERSION` | `index.html` | **`Code.gs` の仕様を変えたときだけ** |
 
-現在: `APP_VERSION` 1.10.0 / `GAS_VERSION` 1.4.0 / `REQUIRED_GAS_VERSION` 1.4.0
+現在: `APP_VERSION` 1.11.0 / `GAS_VERSION` 1.5.0 / `REQUIRED_GAS_VERSION` 1.5.0
 
 設定画面が `ping` で GAS 側の番号を取り、`GAS_VERSION < REQUIRED_GAS_VERSION` のときだけ
 再デプロイを促す警告を出す（比較は `cmpVer()`）。

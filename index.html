@@ -465,13 +465,13 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 // ========== 定数 ==========
 // アプリ（この index.html）のバージョン。GitHub Pages への push で自動更新されるので、
 // 直したら気兼ねなく上げてよい
-const APP_VERSION = '1.10.0';
+const APP_VERSION = '1.11.0';
 
 // このアプリが動くのに必要な gas/Code.gs の最低バージョン。
 // GAS は手で貼り直して再デプロイする必要があるため、これを下回っていたら設定画面が警告を出す。
 // **Code.gs の仕様を変えたときだけ**ここを上げること。フロントだけ直したときに上げると、
 // 中身の変わっていない GAS の貼り直しを強いることになる
-const REQUIRED_GAS_VERSION = '1.4.0';
+const REQUIRED_GAS_VERSION = '1.5.0';
 
 const PLACES = ['冷蔵', '冷凍', '常温'];
 // Budget Manager から取り込んだ、まだ保管場所の決まっていない品目の置き場。
@@ -487,7 +487,7 @@ const TABS = PLACES.concat(RESTOCK, INBOX, NG);
 const KINDS  = ['賞味期限', '消費期限'];
 
 // ジャンル。gas/Code.gs の CATEGORIES と同じ並びにすること
-const CATEGORIES = ['生鮮食品', '惣菜・おかず', 'インスタント', '保存食', 'パスタソース', '調味料', 'おやつ', '飲み物', 'その他'];
+const CATEGORIES = ['生鮮食品', '惣菜・おかず', 'インスタント', '保存食', 'パスタソース', '調味料', 'おやつ', '飲み物', '日用品', 'その他'];
 const DEFAULT_CATEGORY = 'その他';
 
 const LS_URL = 'fm_gas_url';
