@@ -44,6 +44,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .hicons i{cursor:pointer;padding:4px}
 
 .tabrow{display:flex;align-items:center;gap:8px;padding:0 16px 12px;flex-shrink:0}
+/* 食品 / 日用品の切替。保管場所のタブより上の階層なので、タブの上に独立して置く */
+.modebar{display:flex;gap:4px;margin:0 16px 10px;padding:3px;background:var(--surface);border-radius:20px;flex-shrink:0}
+.mode{flex:1;padding:6px 10px;border:none;border-radius:17px;background:transparent;color:var(--text3);font-size:14px;font-family:inherit;cursor:pointer;transition:all .15s}
+.mode.on{background:var(--text);color:var(--bg);font-weight:500}
+.mode .tbadge{display:inline-block;min-width:16px;height:16px;padding:0 4px;margin-left:6px;vertical-align:1px;border-radius:8px;background:var(--danger);color:#fff;font-size:10px;line-height:16px;font-weight:600;text-align:center}
+.mode .tbadge.restock{background:var(--info)}
 .tabs{display:flex;gap:4px;flex:1;min-width:0}
 .sortbtn{flex-shrink:0;background:transparent;border:1px solid var(--border);border-radius:16px;color:var(--text3);font-size:11px;padding:5px 10px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap;transition:all .15s}
 .sortbtn:active{background:var(--surface2)}
@@ -129,6 +135,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
   .scroll-area{overflow:hidden;display:flex;flex-direction:column;min-height:0}
   .food-list.wide{flex:1;min-height:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;padding:0 16px 12px}
   .bottom-bar .add-btn{max-width:360px;margin:0 auto}
+  /* 日用品は 1 列。.scroll-area が overflow:hidden なので、一覧の側でスクロールさせる */
+  .food-list.goods{flex:1;min-height:0;overflow-y:auto;width:100%;max-width:600px;margin:0 auto}
+  .modebar{max-width:280px}
 }
 
 .sec{display:flex;align-items:center;gap:8px;padding:14px 2px 2px;font-size:12px;color:var(--text4)}
@@ -136,6 +145,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .sec b{font-weight:600;color:var(--text3)}
 .sec .n{font-family:var(--mono);font-size:11px}
 .sec::after{content:'';flex:1;height:1px;background:var(--border)}
+.sec.restock b{color:var(--info-fg)}
 
 /* 在庫を切らしているもの。期限の色とは別の見た目にする */
 .food-card.restock{border-left-color:var(--info);border-left-style:dashed}
@@ -270,6 +280,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .sact.danger{color:var(--danger-fg)}
 .sact.danger:active{background:var(--danger-bg)}
 .sheet-err{font-size:13px;color:var(--danger);min-height:18px;margin-top:8px;text-align:center}
+/* 日用品には保管場所も期限もジャンルも無い。購入日だけが残り、横幅いっぱいになる */
+.sheet.goods .food-only{display:none}
 </style>
 </head>
 <body>
@@ -286,7 +298,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
       </div>
     </div>
 
-    <div class="tabrow">
+    <div class="modebar" id="modebar"></div>
+
+    <div class="tabrow" id="tabrow">
       <div class="tabs" id="tabs"></div>
       <button class="sortbtn" id="sortBtn" onclick="toggleSortMode()">
         <i class="ti ti-arrows-sort" aria-hidden="true"></i><span id="sortLabel">期限順</span>
@@ -299,7 +313,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 
     <div class="bottom-bar">
       <button class="add-btn" onclick="openSheet()">
-        <i class="ti ti-plus" aria-hidden="true"></i> 食品を追加
+        <i class="ti ti-plus" aria-hidden="true"></i> <span id="addLabel">食品を追加</span>
       </button>
       <div class="sync-row">
         <span class="sdot" id="syncDot"></span>
@@ -384,17 +398,19 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
     <label class="sheet-label" for="inpName">商品名</label>
     <input class="sheet-inp" id="inpName" placeholder="例：牛乳" maxlength="60">
 
-    <span class="sheet-label">保管場所</span>
-    <div class="seg" id="segPlace"></div>
+    <div class="food-only">
+      <span class="sheet-label">保管場所</span>
+      <div class="seg" id="segPlace"></div>
 
-    <span class="sheet-label">ジャンル</span>
-    <div class="seg" id="segCat"></div>
+      <span class="sheet-label">ジャンル</span>
+      <div class="seg" id="segCat"></div>
 
-    <span class="sheet-label">期限種別</span>
-    <div class="seg" id="segKind"></div>
+      <span class="sheet-label">期限種別</span>
+      <div class="seg" id="segKind"></div>
+    </div>
 
     <div class="row2">
-      <div>
+      <div class="food-only">
         <div class="label-row">
           <label class="sheet-label" for="inpExpiry">期限日（任意）</label>
         </div>
@@ -421,7 +437,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
       <button class="sact" onclick="consumeFromSheet()">
         <i class="ti ti-check" aria-hidden="true"></i> 消費済みにする
       </button>
-      <button class="sact" onclick="moveToNg()">
+      <button class="sact" id="btnNg" onclick="moveToNg()">
         <i class="ti ti-thumb-down" aria-hidden="true"></i> NGに移す
       </button>
       <button class="sact danger" onclick="removeFromSheet()">
@@ -465,7 +481,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 // ========== 定数 ==========
 // アプリ（この index.html）のバージョン。GitHub Pages への push で自動更新されるので、
 // 直したら気兼ねなく上げてよい
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.12.0';
 
 // このアプリが動くのに必要な gas/Code.gs の最低バージョン。
 // GAS は手で貼り直して再デプロイする必要があるため、これを下回っていたら設定画面が警告を出す。
@@ -490,9 +506,18 @@ const KINDS  = ['賞味期限', '消費期限'];
 const CATEGORIES = ['生鮮食品', '惣菜・おかず', 'インスタント', '保存食', 'パスタソース', '調味料', 'おやつ', '飲み物', '日用品', 'その他'];
 const DEFAULT_CATEGORY = 'その他';
 
+// 日用品。食品とは別の階層（ヘッダ下の「食品／日用品」の切替）として扱う。
+// 保管場所も期限もジャンルも持たないので、列は足さず、ジャンルが「日用品」の行を日用品とみなす。
+// 日用品はジャンルの選択肢には出さない（食品の登録画面で選ばせない）
+const GOODS = '日用品';
+const FOOD_CATEGORIES = CATEGORIES.filter(c => c !== GOODS);
+// GAS が保管場所を必須にしているので、日用品には常温を入れておく（画面には出さない）
+const GOODS_PLACE = PLACES[2];
+
 const LS_URL = 'fm_gas_url';
 const LS_WARN = 'fm_warn_days';
 const LS_SORT = 'fm_sort_mode';
+const LS_MODE = 'fm_mode';
 const DEFAULT_WARN_DAYS = 3;
 
 // ========== 状態 ==========
@@ -508,7 +533,9 @@ let sheetNgId = null;      // 編集中の NG の ID。null なら新規追加
 let sheetInbox = null;     // 取込待ちから開いているときの、その品目。通常の追加・編集なら null
 let gasUrl = '';
 let warnDays = DEFAULT_WARN_DAYS;
+let mode = 'food';          // 'food'（食品。保管場所のタブ）か 'goods'（日用品）
 let currentPlace = PLACES[0];
+let sheetGoods = false;     // いま開いている登録画面が日用品のものか
 let sheetPlace = PLACES[0];
 let sheetKind = KINDS[0];
 let sheetFoodId = null;     // 編集中の食品のID。null なら新規追加
@@ -530,6 +557,7 @@ function loadSettings() {
   const w = parseInt(localStorage.getItem(LS_WARN), 10);
   warnDays = isFinite(w) && w >= 0 ? w : DEFAULT_WARN_DAYS;
   sortMode = localStorage.getItem(LS_SORT) === 'category' ? 'category' : 'expiry';
+  mode = localStorage.getItem(LS_MODE) === 'goods' ? 'goods' : 'food';
 }
 
 function saveSettingsToStorage() {
@@ -651,7 +679,7 @@ function selectCalDay(dateStr) {
 function foodsByExpiry() {
   const map = {};
   foods.forEach(f => {
-    if (f.consumed || !f.expiryDate || isRestock(f)) return;
+    if (f.consumed || !f.expiryDate || isRestock(f) || isGoods(f)) return;
     (map[f.expiryDate] = map[f.expiryDate] || []).push(f);
   });
   return map;
@@ -871,6 +899,7 @@ function shortDate(s) {
 
 // ========== 描画 ==========
 function renderAll() {
+  renderMode();
   renderTabs();
   renderList();
   if (isCalendarOpen()) renderCalendar();
@@ -894,12 +923,53 @@ function stockIn(place) { return foodsIn(place).filter(f => !inRestock(f)); }
 /** 「買い足す」タブに出す食品。保管場所の並び順で、同じ場所の中は登録順（sort は安定） */
 function restockFoods() {
   return foods
-    .filter(f => !f.consumed && inRestock(f))
+    .filter(f => !f.consumed && !isGoods(f) && inRestock(f))
     .sort((a, b) => PLACES.indexOf(a.place) - PLACES.indexOf(b.place));
 }
 
 /** その食品が見えるタブ。追加・編集のあと、そのタブを見せるのに使う */
 function tabOf(f) { return isRestock(f) ? RESTOCK : f.place; }
+
+/** 日用品か。ジャンルが「日用品」の行。食品側の一覧・警告・カレンダーには一切出さない */
+function isGoods(f) { return String(f.category || '').trim() === GOODS; }
+
+/** 日用品の一覧（登録順。期限も保管場所も無いので並べ替えは要らない） */
+function goodsItems() { return foods.filter(f => !f.consumed && isGoods(f)); }
+
+/** 追加・編集のあと、その行が見える画面（食品か日用品か、食品ならどのタブか）を見せる */
+function showTabFor(f) {
+  if (isGoods(f)) { mode = 'goods'; }
+  else { mode = 'food'; currentPlace = tabOf(f); }
+  localStorage.setItem(LS_MODE, mode);
+}
+
+function setMode(m) {
+  if (m !== 'food' && m !== 'goods') return;
+  if (m === mode) return;
+  mode = m;
+  localStorage.setItem(LS_MODE, mode);
+  renderAll();
+  renderSortBtn();
+  document.getElementById('scrollArea').scrollTop = 0;
+}
+
+/**
+ * ヘッダ下の「食品／日用品」の切替。食品側の期限の警告（赤）と、日用品側の切らしている件数（青）を
+ * 添える。どちらを見ていても、もう一方の気になる件数が分かるように。
+ */
+function renderMode() {
+  const goods = mode === 'goods';
+  const alerts = PLACES.reduce((n, p) => n + alertCount(p), 0);
+  const out = goodsItems().filter(inRestock).length;
+  document.getElementById('modebar').innerHTML =
+    `<button class="mode${goods ? '' : ' on'}" onclick="setMode('food')">食品`
+    + `${alerts ? `<span class="tbadge">${alerts}</span>` : ''}</button>`
+    + `<button class="mode${goods ? ' on' : ''}" onclick="setMode('goods')">日用品`
+    + `${out ? `<span class="tbadge restock">${out}</span>` : ''}</button>`;
+  // 日用品には保管場所のタブも並べ替えも無い
+  document.getElementById('tabrow').style.display = goods ? 'none' : '';
+  document.getElementById('addLabel').textContent = goods ? '日用品を追加' : '食品を追加';
+}
 
 /** シート由来の値が空や未知でも、必ず既定のジャンルに寄せる */
 function catOf(f) {
@@ -988,7 +1058,7 @@ function setupSwipe() {
   }, { passive: true });
 
   area.addEventListener('touchend', e => {
-    if (isWide()) return;   // 広い画面は全部の列が見えているので、移動するものがない
+    if (isWide() || mode === 'goods') return;   // 広い画面は全部の列が見える。日用品にはタブが無い
     const t = e.changedTouches[0];
     const dx = t.clientX - x0;
     const dy = t.clientY - y0;
@@ -1013,7 +1083,7 @@ function setupSwipe() {
  */
 function foodsIn(place) {
   return foods
-    .filter(f => !f.consumed && f.place === place)
+    .filter(f => !f.consumed && !isGoods(f) && f.place === place)
     .sort((a, b) => {
       const ax = a.expiryDate || '';
       const bx = b.expiryDate || '';
@@ -1058,8 +1128,39 @@ function placeHtml(place, compact) {
   return parts.join('');
 }
 
+/**
+ * 日用品の一覧。切らしているもの（数量 0）を先頭の「買い足す」にまとめ、あとは「在庫あり」。
+ * 食品の「買い足す」タブとは混ぜない（日用品は日用品だけで完結させる）。
+ */
+function goodsHtml() {
+  const list = goodsItems();
+  if (!list.length) {
+    return `<div class="empty-state">${gasUrl
+      ? '日用品はまだありません。<br>下のボタンから、洗剤やトイレットペーパーなどを<br>追加できます。'
+      : 'まず設定からGASのウェブアプリURLを<br>登録してください。'}</div>`;
+  }
+  const out = list.filter(inRestock);
+  const have = list.filter(f => !inRestock(f));
+  const parts = [];
+  if (out.length) {
+    parts.push(sectionHtml('買い足す', out.length, 'restock'));
+    parts.push(...out.map(f => cardHtml(f)));
+  }
+  if (have.length) {
+    if (out.length) parts.push(sectionHtml('在庫あり', have.length));
+    parts.push(...have.map(f => cardHtml(f)));
+  }
+  return parts.join('');
+}
+
 function renderList() {
   const el = document.getElementById('foodList');
+  el.classList.toggle('goods', mode === 'goods');
+  if (mode === 'goods') {
+    el.classList.remove('wide');
+    el.innerHTML = goodsHtml();
+    return;
+  }
   if (isWide()) { renderWide(el); return; }
 
   el.classList.remove('wide');
@@ -1209,11 +1310,12 @@ function inboxCardHtml(it) {
 }
 
 function cardHtml(f, showPlace) {
+  const goods = isGoods(f);
   const d = daysUntil(f.expiryDate);
   const st = statusOf(f);
-  // 切らしているものは期限の色分けをしない（手元に無いので傷みようがない）
+  // 切らしているものは期限の色分けをしない（手元に無いので傷みようがない）。日用品は期限が無い
   const out = isRestock(f);
-  const warnCls = (st === 'expired' || st === 'soon') ? ' ' + st : '';
+  const warnCls = (!goods && (st === 'expired' || st === 'soon')) ? ' ' + st : '';
   const cls = out ? ' restock' : warnCls;
   const badgeCls = out ? ' restock' : warnCls;
   const n = Number(f.quantity) || 0;
@@ -1227,8 +1329,8 @@ function cardHtml(f, showPlace) {
   // 期限を登録していない食品もあるので、あるものだけを並べる
   const meta = [];
   // 買い足すタブは保管場所をまたぐので、どこの食品かを先頭に添える
-  if (showPlace) meta.push(`<span class="fplace">${escHtml(f.place)}</span>`);
-  if (f.expiryDate) {
+  if (showPlace && !goods) meta.push(`<span class="fplace">${escHtml(f.place)}</span>`);
+  if (f.expiryDate && !goods) {
     meta.push(`<span class="fkind">${escHtml(f.kind)} <span class="fdate">${escHtml(f.expiryDate)}</span></span>`);
   }
   if (f.boughtDate) {
@@ -1244,7 +1346,7 @@ function cardHtml(f, showPlace) {
         <div class="fmeta">${meta.join('')}</div>
       </div>
       <div class="fright">
-        <span class="badge${badgeCls}">${out ? '切らしている' : escHtml(expiryLabel(d))}</span>
+        ${goods && !out ? '' : `<span class="badge${badgeCls}">${out ? '切らしている' : escHtml(expiryLabel(d))}</span>`}
         ${qty}
       </div>
     </div>`;
@@ -1321,12 +1423,21 @@ function openSheet(id) {
   sheetFoodId = food ? food.id : null;
   sheetInbox = null;
 
-  // 取込タブは保管場所ではないので、そこから開いた追加では先頭の保管場所を選んでおく
-  sheetPlace = food ? food.place : (PLACES.indexOf(currentPlace) >= 0 ? currentPlace : PLACES[0]);
-  sheetKind = (food && food.kind) ? food.kind : KINDS[0];
-  sheetCat = food ? catOf(food) : DEFAULT_CATEGORY;
+  // 日用品の画面から開いた追加、または日用品の編集は、日用品用の登録画面（保管場所・ジャンル・期限なし）
+  sheetGoods = food ? isGoods(food) : mode === 'goods';
+  document.getElementById('editSheet').classList.toggle('goods', sheetGoods);
+  document.getElementById('btnNg').style.display = sheetGoods ? 'none' : '';   // NG は食品の記録
 
-  document.getElementById('sheetTitle').textContent = food ? '食品を編集' : '食品を追加';
+  // 取込タブは保管場所ではないので、そこから開いた追加では先頭の保管場所を選んでおく
+  sheetPlace = food ? food.place
+    : sheetGoods ? GOODS_PLACE
+    : (PLACES.indexOf(currentPlace) >= 0 ? currentPlace : PLACES[0]);
+  sheetKind = (food && food.kind) ? food.kind : KINDS[0];
+  sheetCat = sheetGoods ? GOODS : (food ? catOf(food) : DEFAULT_CATEGORY);
+
+  const noun = sheetGoods ? '日用品' : '食品';
+  document.getElementById('sheetTitle').textContent = noun + (food ? 'を編集' : 'を追加');
+  document.getElementById('inpName').placeholder = sheetGoods ? '例：トイレットペーパー' : '例：牛乳';
   document.getElementById('sheetCtx').hidden = true;
   document.getElementById('inpName').value = food ? food.name : '';
   document.getElementById('inpExpiry').value = food ? (food.expiryDate || '') : '';
@@ -1378,7 +1489,7 @@ function renderSegs() {
     `<button class="${p === sheetPlace ? 'sel' : ''}" onclick="pickPlace('${p}')">${escHtml(p)}</button>`).join('');
   document.getElementById('segKind').innerHTML = KINDS.map(k =>
     `<button class="${k === sheetKind ? 'sel' : ''}" onclick="pickKind('${k}')">${escHtml(k)}</button>`).join('');
-  document.getElementById('segCat').innerHTML = CATEGORIES.map((c, i) =>
+  document.getElementById('segCat').innerHTML = FOOD_CATEGORIES.map((c, i) =>
     `<button class="${c === sheetCat ? 'sel' : ''}" onclick="pickCat(${i})">${escHtml(c)}</button>`).join('');
 }
 
@@ -1400,7 +1511,7 @@ function bumpSheetQty(delta) { setSheetQty(sheetQty + delta); }
 function pickPlace(p) { sheetPlace = p; renderSegs(); }
 function pickKind(k) { sheetKind = k; renderSegs(); }
 /** ジャンルは添字で受ける（文字列を onclick に埋め込まないため） */
-function pickCat(i) { sheetCat = CATEGORIES[i] || DEFAULT_CATEGORY; renderSegs(); }
+function pickCat(i) { sheetCat = FOOD_CATEGORIES[i] || DEFAULT_CATEGORY; renderSegs(); }
 
 /** 期限日が未入力なら、期限種別は意味を持たないので選べなくする */
 function updateKindState() {
@@ -1412,7 +1523,7 @@ async function saveSheet() {
   const err = document.getElementById('sheetErr');
   err.textContent = '';
 
-  const expiryDate = document.getElementById('inpExpiry').value;
+  const expiryDate = sheetGoods ? '' : document.getElementById('inpExpiry').value;   // 日用品に期限は無い
   const food = {
     name: document.getElementById('inpName').value.trim(),
     place: sheetPlace,
@@ -1439,7 +1550,7 @@ async function saveSheet() {
 async function applyCreate(food) {
   const tmp = Object.assign({ id: 'tmp_' + Date.now(), consumed: false, pending: true }, food);
   foods.push(tmp);
-  currentPlace = tabOf(food);   // 数量 0 で追加したなら、買い足すタブを見せる
+  showTabFor(food);   // 数量 0 で追加した食品なら買い足すタブ、日用品なら日用品の画面を見せる
   renderAll();
   setSyncState('busy', '保存中...');
 
@@ -1519,7 +1630,7 @@ async function applyUpdate(id, patch) {
 
   const before = foods[i];
   foods[i] = Object.assign({}, before, patch, { pending: true });
-  currentPlace = tabOf(foods[i]);   // 直した食品が見えるタブを見せる（切らしているなら買い足す）
+  showTabFor(foods[i]);   // 直したものが見える画面を見せる（切らしている食品なら買い足す）
   renderAll();
   setSyncState('busy', '保存中...');
 
@@ -1614,9 +1725,12 @@ async function saveQty(id) {
   const wasRestock = qtyHold[key];
   delete qtyHold[key];
   if (cur && wasRestock !== isRestock(cur)) {
-    showToast(isRestock(cur)
-      ? cur.name + ' を「' + RESTOCK + '」へ移しました'
-      : cur.name + ' を ' + cur.place + ' に戻しました');
+    // 日用品は同じ画面の中で「買い足す」と「在庫あり」を行き来する（タブを移るわけではない）
+    showToast(isGoods(cur)
+      ? (isRestock(cur) ? cur.name + ' を「' + RESTOCK + '」に入れました' : cur.name + ' を在庫に戻しました')
+      : (isRestock(cur)
+        ? cur.name + ' を「' + RESTOCK + '」へ移しました'
+        : cur.name + ' を ' + cur.place + ' に戻しました'));
     renderAll();
   }
 }
